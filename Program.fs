@@ -44,13 +44,15 @@ module IntEncoding =
 
     [<Struct>]
     type Node =
-        private {
+        {
             Value : int
         }
         static member BufferIdCode = 0
         static member ConstraintIdCode = 1
         static member MergeIdCode = 2
         static member SplitIdCode = 3
+        member node.TypeCode = node.Value &&& 0x0000000F
+        member node.IdValue = node.Value >>> 4
 
 
     module Node =
@@ -69,7 +71,7 @@ module IntEncoding =
 
     module ActivePattern =
 
-        let (|BufferId|ConstraintId|SplitId|MergeId|) (node: Node) =
+        let inline (|BufferId|ConstraintId|SplitId|MergeId|) (node: Node) =
             // Get the nibble which encodes the type of Id
             let nodeType = node.Value &&& 0x0000000F
             // Get the value of the Id
@@ -94,56 +96,59 @@ module IntEncoding =
     module PartialActivePattern =
 
         [<return: Struct>]
-        let (|BufferId|_|) (node: Node) =
+        let inline (|BufferId|_|) (node: Node) =
             let nodeType = node.Value &&& 0x0000000F
-            let idValue = node.Value >>> 4
 
             if nodeType = Node.BufferIdCode then
+                let idValue = node.Value >>> 4
                 ValueSome (idValue * 1<BufferId>)
             else
                 ValueNone
 
+
         [<return: Struct>]
-        let (|ConstraintId|_|) (node: Node) =
+        let inline (|ConstraintId|_|) (node: Node) =
             let nodeType = node.Value &&& 0x0000000F
-            let idValue = node.Value >>> 4
 
             if nodeType = Node.ConstraintIdCode then
+                let idValue = node.Value >>> 4
                 ValueSome (idValue * 1<ConstraintId>)
             else
                 ValueNone
 
+
         [<return: Struct>]
-        let (|MergeId|_|) (node: Node) =
+        let inline (|MergeId|_|) (node: Node) =
             let nodeType = node.Value &&& 0x0000000F
-            let idValue = node.Value >>> 4
 
             if nodeType = Node.MergeIdCode then
+                let idValue = node.Value >>> 4
                 ValueSome (idValue * 1<MergeId>)
             else
                 ValueNone
 
+
         [<return: Struct>]
-        let (|SplitId|_|) (node: Node) =
+        let inline (|SplitId|_|) (node: Node) =
             let nodeType = node.Value &&& 0x0000000F
-            let idValue = node.Value >>> 4
 
             if nodeType = Node.SplitIdCode then
+                let idValue = node.Value >>> 4
                 ValueSome (idValue * 1<SplitId>)
             else
                 ValueNone
 
 
-[<MemoryDiagnoser>]
+[<MemoryDiagnoser; HardwareCounters(HardwareCounter.BranchMispredictions, HardwareCounter.CacheMisses)>]
 type Benchmarks () =
 
     let rng = Random 123
     let nodeCount = 100
-    let lookupCount = 10
-    let loopCount = 1_000_000
+    let lookupCount = 100
+    let loopCount = 100_000
 
     let nodes =
-        [|for i in 1 .. nodeCount ->
+        [|for i in 0 .. nodeCount - 1 ->
             match rng.Next (0, 4) with
             | 0 -> DuEncoding.Node.BufferId 1<BufferId>
             | 1 -> DuEncoding.Node.ConstraintId 1<ConstraintId>
@@ -170,7 +175,7 @@ type Benchmarks () =
 
 
     [<Benchmark>]
-    member _.DuEncoding () =
+    member _.DuEncodingRandomAccess () =
         let mutable acc = 0
 
         for lookupsIndex = 0 to loopCount - 1 do
@@ -189,7 +194,7 @@ type Benchmarks () =
 
 
     [<Benchmark>]
-    member _.StructDuEncoding () =
+    member _.StructDuEncodingRandomAccess () =
         let mutable acc = 0
 
         for lookupsIndex = 0 to loopCount - 1 do
@@ -208,7 +213,7 @@ type Benchmarks () =
 
 
     [<Benchmark>]
-    member _.IntEncodingWithActivePattern () =
+    member _.IntEncodingWithActivePatternRandomAccess () =
         let mutable acc = 0
 
 
@@ -228,7 +233,7 @@ type Benchmarks () =
 
 
     [<Benchmark>]
-    member _.IntEncodingWithPartialActivePattern () =
+    member _.IntEncodingWithPartialActivePatternRandomAccess () =
         let mutable acc = 0
 
         for lookupsIndex = 0 to loopCount - 1 do
@@ -246,6 +251,137 @@ type Benchmarks () =
 
         acc
 
+    [<Benchmark>]
+    member _.IntEncodingTypeCodeCheckRandomAccess () =
+        let mutable acc = 0
+
+        for lookupsIndex = 0 to loopCount - 1 do
+            let lookups = randomNodeIndices[lookupsIndex]
+            
+            for lookupIndex = 0 to lookups.Length - 1 do
+                let randomNodeIndex = lookups[lookupIndex]
+                let node = intEncodedNodes[randomNodeIndex]
+                let typeCode = node.TypeCode
+                let idValue = node.IdValue
+
+                if typeCode = IntEncoding.Node.BufferIdCode then
+                    let bufferId = idValue * 1<BufferId>
+                    acc <- acc + 1
+
+                elif typeCode = IntEncoding.Node.ConstraintIdCode then
+                    let constraintId = idValue * 1<ConstraintId>
+                    acc <- acc + 1
+
+                elif typeCode = IntEncoding.Node.MergeIdCode then
+                    let mergeId = idValue * 1<MergeId>
+                    acc <- acc + 1
+                
+                elif typeCode = IntEncoding.Node.SplitIdCode then
+                    let splitId = idValue * 1<SplitId>
+                    acc <- acc + 1
+
+        acc
+
+
+    [<Benchmark>]
+    member _.DuEncodingLinearAccess () =
+        let mutable acc = 0
+
+        for _ = 0 to loopCount - 1 do
+
+            for i = 0 to nodes.Length - 1 do
+
+                match nodes[i] with
+                | DuEncoding.Node.BufferId bufferId -> acc <- acc + 1
+                | DuEncoding.Node.ConstraintId constraintId -> acc <- acc + 2
+                | DuEncoding.Node.MergeId mergeId -> acc <- acc + 3
+                | DuEncoding.Node.SplitId splitId -> acc <- acc + 4
+
+        acc
+
+
+    [<Benchmark>]
+    member _.StructDuEncodingLinearAccess () =
+        let mutable acc = 0
+
+        for _ = 0 to loopCount - 1 do
+
+            for i = 0 to structNodes.Length - 1 do
+
+                match structNodes[i] with
+                | StructDuEncoding.Node.BufferId bufferId -> acc <- acc + 1
+                | StructDuEncoding.Node.ConstraintId constraintId -> acc <- acc + 2
+                | StructDuEncoding.Node.MergeId mergeId -> acc <- acc + 3
+                | StructDuEncoding.Node.SplitId splitId -> acc <- acc + 4
+
+        acc
+
+
+    [<Benchmark>]
+    member _.IntEncodingWithActivePatternLinearAccess () =
+        let mutable acc = 0
+
+
+        for _ = 0 to loopCount - 1 do
+
+            for i = 0 to intEncodedNodes.Length - 1 do
+
+                match intEncodedNodes[i] with
+                | IntEncoding.ActivePattern.BufferId bufferId -> acc <- acc + 1
+                | IntEncoding.ActivePattern.ConstraintId constraintId -> acc <- acc + 2
+                | IntEncoding.ActivePattern.MergeId mergeId -> acc <- acc + 3
+                | IntEncoding.ActivePattern.SplitId splitId -> acc <- acc + 4
+
+        acc
+
+
+    [<Benchmark>]
+    member _.IntEncodingWithPartialActivePatternLinearAccess () =
+        let mutable acc = 0
+
+        for _ = 0 to loopCount - 1 do
+
+            for i = 0 to intEncodedNodes.Length - 1 do
+
+                match intEncodedNodes[i] with
+                | IntEncoding.PartialActivePattern.BufferId bufferId -> acc <- acc + 1
+                | IntEncoding.PartialActivePattern.ConstraintId constraintId -> acc <- acc + 2
+                | IntEncoding.PartialActivePattern.MergeId mergeId -> acc <- acc + 3
+                | IntEncoding.PartialActivePattern.SplitId splitId -> acc <- acc + 4
+                | _ -> failwith "¯\_(ツ)_/¯"
+
+        acc
+
+
+    [<Benchmark>]
+    member _.IntEncodingTypeCodeLinearAccess () =
+        let mutable acc = 0
+
+        for _ = 0 to loopCount - 1 do
+
+            for i = 0 to intEncodedNodes.Length - 1 do
+
+                let node = intEncodedNodes[i]
+                let typeCode = node.TypeCode
+                let idValue = node.IdValue
+
+                if typeCode = IntEncoding.Node.BufferIdCode then
+                    let bufferId = idValue * 1<BufferId>
+                    acc <- acc + 1
+
+                elif typeCode = IntEncoding.Node.ConstraintIdCode then
+                    let constraintId = idValue * 1<ConstraintId>
+                    acc <- acc + 1
+
+                elif typeCode = IntEncoding.Node.MergeIdCode then
+                    let mergeId = idValue * 1<MergeId>
+                    acc <- acc + 1
+                
+                elif typeCode = IntEncoding.Node.SplitIdCode then
+                    let splitId = idValue * 1<SplitId>
+                    acc <- acc + 1
+
+        acc
 
 
 
