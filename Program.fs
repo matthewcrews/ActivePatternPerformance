@@ -1,6 +1,4 @@
 ﻿open System
-open System.Collections.Generic
-open System.Runtime.InteropServices
 open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
 open BenchmarkDotNet.Diagnosers
