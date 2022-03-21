@@ -42,7 +42,7 @@ module IntEncoding =
 
     [<Struct>]
     type Node =
-        {
+        private {
             Value : int
         }
         static member BufferIdCode = 0
@@ -69,7 +69,7 @@ module IntEncoding =
 
     module ActivePattern =
 
-        let inline (|BufferId|ConstraintId|SplitId|MergeId|) (node: Node) =
+        let (|BufferId|ConstraintId|SplitId|MergeId|) (node: Node) =
             // Get the nibble which encodes the type of Id
             let nodeType = node.Value &&& 0x0000000F
             // Get the value of the Id
@@ -94,7 +94,7 @@ module IntEncoding =
     module PartialActivePattern =
 
         [<return: Struct>]
-        let inline (|BufferId|_|) (node: Node) =
+        let (|BufferId|_|) (node: Node) =
             let nodeType = node.Value &&& 0x0000000F
 
             if nodeType = Node.BufferIdCode then
@@ -105,7 +105,7 @@ module IntEncoding =
 
 
         [<return: Struct>]
-        let inline (|ConstraintId|_|) (node: Node) =
+        let (|ConstraintId|_|) (node: Node) =
             let nodeType = node.Value &&& 0x0000000F
 
             if nodeType = Node.ConstraintIdCode then
@@ -116,7 +116,7 @@ module IntEncoding =
 
 
         [<return: Struct>]
-        let inline (|MergeId|_|) (node: Node) =
+        let (|MergeId|_|) (node: Node) =
             let nodeType = node.Value &&& 0x0000000F
 
             if nodeType = Node.MergeIdCode then
@@ -127,7 +127,7 @@ module IntEncoding =
 
 
         [<return: Struct>]
-        let inline (|SplitId|_|) (node: Node) =
+        let (|SplitId|_|) (node: Node) =
             let nodeType = node.Value &&& 0x0000000F
 
             if nodeType = Node.SplitIdCode then
